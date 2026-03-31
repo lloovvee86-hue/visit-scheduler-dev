@@ -4,8 +4,11 @@ import requests
 import os
 from dotenv import load_dotenv
 
-# Load environment variables from config.env (renamed to bypass AnySign locking)
-load_dotenv('config.env')
+# Default to config.env but fallback to .env if missing
+if os.path.exists('config.env'):
+    load_dotenv('config.env')
+else:
+    load_dotenv()
 
 app = Flask(__name__, static_folder='.', static_url_path='')
 # Enable CORS for the frontend
@@ -118,6 +121,7 @@ def search_places():
                             if not any(abs(float(d['x']) - float(doc['x'])) < 0.0001 and abs(float(d['y']) - float(doc['y'])) < 0.0001 for d in documents):
                                 documents.append(doc)
 
+
         return jsonify({'documents': documents, 'meta': {'total_count': len(documents)}}), 200
         
     except Exception as e:
@@ -125,5 +129,9 @@ def search_places():
         return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
-    print("Starting Visit Scheduler API Proxy Server on http://127.0.0.1:5000")
-    app.run(port=5000, debug=True)
+    # Use 0.0.0.0 to listen on all interfaces (Required for Render)
+    # Use PORT env variable if available (Required for Render)
+    port = int(os.environ.get('PORT', 5000))
+    print(f"Starting Visit Scheduler API Proxy Server on port {port}")
+    app.run(host='0.0.0.0', port=port, debug=True)
+
