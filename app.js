@@ -124,6 +124,10 @@
         // Departure search
         setupSearch(els.departureInput, els.departureDropdown, (place) => {
             state.departure = place;
+            if (place.contact) {
+                const id = state.departure.id || `${state.departure.lat}-${state.departure.lng}`;
+                state.contacts[id] = place.contact;
+            }
             if (els.departureInput._setSearchValue) {
                 els.departureInput._setSearchValue(place.name);
             } else {
@@ -139,6 +143,10 @@
         // Arrival search
         setupSearch(els.arrivalInput, els.arrivalDropdown, (place) => {
             state.arrival = place;
+            if (place.contact) {
+                const id = state.arrival.id || `${state.arrival.lat}-${state.arrival.lng}`;
+                state.contacts[id] = place.contact;
+            }
             if (els.arrivalInput._setSearchValue) {
                 els.arrivalInput._setSearchValue(place.name);
             } else {
@@ -395,9 +403,11 @@
         addBtn.addEventListener('click', async () => {
             const nameInput = document.getElementById('entNameInput');
             const addrInput = document.getElementById('entAddressInput');
+            const contactInput = document.getElementById('entContactInput');
             const catInput = document.getElementById('entCategoryInput');
             const name = nameInput.value.trim();
             const address = addrInput.value.trim();
+            const contact = contactInput.value.trim();
             const category = catInput.value.trim() || '협력사';
 
             if (!name || !address) {
@@ -418,7 +428,7 @@
                 return;
             }
 
-            const entry = { name, address, lat, lng, category };
+            const entry = { name, address, contact, lat, lng, category };
             
             // Save to Server
             try {
@@ -446,6 +456,7 @@
             // Clear inputs
             nameInput.value = '';
             addrInput.value = '';
+            contactInput.value = '';
             catInput.value = '';
 
             renderEnterpriseList();
@@ -496,7 +507,8 @@
                 html += `<div style="display:flex; align-items:center; justify-content:space-between; padding:6px 8px; margin-bottom:4px; background:rgba(255,255,255,0.03); border-radius:6px; font-size:0.8rem;">
                     <div>
                         <strong>${entry.name}</strong>
-                        <div style="color:#8b8fa3; font-size:0.7rem;">${entry.address}</div>
+                        <div style="color:#8b8fa3; font-size:0.7rem;">📍 ${entry.address}</div>
+                        ${entry.contact ? `<div style="color:var(--accent-blue); font-size:0.7rem;">👤 담당: ${entry.contact}</div>` : ''}
                     </div>
                     <button onclick="window._deleteEnterprise(${i})" style="background:none; border:none; color:#e74c3c; cursor:pointer; font-size:1rem; padding:2px 6px;" title="삭제">✕</button>
                 </div>`;
@@ -602,7 +614,8 @@
                 address: item.road_address_name || item.address_name,
                 lat: parseFloat(item.y),
                 lng: parseFloat(item.x),
-                category: item.category_group_name || '기타'
+                category: item.category_group_name || '기타',
+                contact: '' // SDK searches don't provide contact info
             });
         });
         console.log(`[검색] SDK 키워드에서 ${sdkResults.length}건 발견, 총 ${allResults.length}건`);
@@ -732,6 +745,11 @@
             wpData.address = place.address;
             wpData.lat = place.lat;
             wpData.lng = place.lng;
+            wpData.contact = place.contact;
+
+            if (place.contact) {
+                state.contacts[id] = place.contact;
+            }
             
             if (wpInput._setSearchValue) {
                 wpInput._setSearchValue(place.name);
@@ -1363,7 +1381,7 @@
                         <td class="col-remarks">
                             ${isLast ? '' : `
                                 <div class="remark-item">
-                                    <div class="remark-addr">📍 ${point.address || ''}</div>
+                                    <div class="remark-addr" style="font-size:0.75rem; color:var(--text-muted); line-height:1.3;">📍 ${point.address || ''}</div>
                                     <div class="remark-contact" style="display:flex; align-items:center; margin-top:4px; border-top:1px dashed var(--border-subtle); padding-top:4px;">
                                         <span style="color:var(--text-muted); font-size:0.75rem; margin-right:6px; white-space:nowrap;">👤 담당:</span>
                                         <input type="text" class="input-contact" 
