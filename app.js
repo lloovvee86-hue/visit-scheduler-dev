@@ -343,10 +343,11 @@
         });
     }
 
-    // ===== 기업 주소록 (JSON 파일 + localStorage 병합) =====
+    // ===== 기업 주소록 (JSON 파일 + 서버 API 병합) =====
     let ENTERPRISE_DIRECTORY = [];
+    let CUSTOM_ENTERPRISE_DIRECTORY = [];
 
-    // Load enterprise directory from JSON + localStorage
+    // Load enterprise directory from JSON + Server API
     async function loadEnterpriseDirectory() {
         // 1. Load from JSON file (base directory)
         try {
@@ -354,24 +355,29 @@
             if (res.ok) {
                 const data = await res.json();
                 ENTERPRISE_DIRECTORY = data.filter(e => e.lat !== 0 && e.lng !== 0);
-                console.log(`[기업주소록] JSON에서 ${ENTERPRISE_DIRECTORY.length}건 로드`);
+                console.log(`[기업주소록] 기본 DB에서 ${ENTERPRISE_DIRECTORY.length}건 로드`);
             }
         } catch (e) {
-            console.warn('[기업주소록] JSON 로드 실패', e);
+            console.warn('[기업주소록] 기본 DB 로드 실패', e);
         }
 
-        // 2. Merge with localStorage (user-added entries)
+        // 2. Merge with Server API (Shared custom entries)
         try {
-            const stored = JSON.parse(localStorage.getItem('enterprise_custom') || '[]');
-            stored.forEach(entry => {
-                // Avoid duplicates by checking name+address
-                const exists = ENTERPRISE_DIRECTORY.some(e => 
-                    e.name === entry.name && e.address === entry.address
-                );
-                if (!exists) ENTERPRISE_DIRECTORY.push(entry);
-            });
-            if (stored.length) console.log(`[기업주소록] localStorage에서 ${stored.length}건 병합`);
-        } catch (e) {}
+            const res = await fetch('/api/custom-enterprise');
+            if (res.ok) {
+                CUSTOM_ENTERPRISE_DIRECTORY = await res.json();
+                console.log(`[기업주소록] 서버에서 ${CUSTOM_ENTERPRISE_DIRECTORY.length}건 동기화`);
+                
+                CUSTOM_ENTERPRISE_DIRECTORY.forEach(entry => {
+                    const exists = ENTERPRISE_DIRECTORY.some(e => 
+                        e.name === entry.name && e.address === entry.address
+                    );
+                    if (!exists) ENTERPRISE_DIRECTORY.push(entry);
+                });
+            }
+        } catch (e) {
+            console.log("ℹ️ 서버 주소록 동기화 실패 (기본값 사용)");
+        }
     }
 
     // Enterprise Management UI
@@ -414,20 +420,34 @@
 
             const entry = { name, address, lat, lng, category };
             
-            // Save to localStorage
-            const stored = JSON.parse(localStorage.getItem('enterprise_custom') || '[]');
-            stored.push(entry);
-            localStorage.setItem('enterprise_custom', JSON.stringify(stored));
+            // Save to Server
+            try {
+                const res = await fetch('/api/custom-enterprise', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(entry)
+                });
+                if (res.ok) {
+                    showToast(`✅ "${name}" 전용 주소록에 동기화 완료!`);
+                }
+            } catch (e) {
+                console.warn('서버 저장 실패, 로컬에만 추가됨', e);
+            }
             
-            // Add to runtime directory
-            ENTERPRISE_DIRECTORY.push(entry);
+            // Update runtime directory (to reflect immediately)
+            const exists = ENTERPRISE_DIRECTORY.some(e => 
+                e.name === entry.name && e.address === entry.address
+            );
+            if (!exists) {
+                ENTERPRISE_DIRECTORY.push(entry);
+                CUSTOM_ENTERPRISE_DIRECTORY.push(entry);
+            }
 
             // Clear inputs
             nameInput.value = '';
             addrInput.value = '';
             catInput.value = '';
 
-            showToast(`✅ "${name}" 등록 완료!`);
             renderEnterpriseList();
         });
     }
@@ -461,11 +481,12 @@
         const list = document.getElementById('enterpriseList');
         if (!list) return;
         
-        const stored = JSON.parse(localStorage.getItem('enterprise_custom') || '[]');
+        const stored = CUSTOM_ENTERPRISE_DIRECTORY;
         const storedKeys = new Set(stored.map(e => `${e.name}|${e.address}`));
         
-        let html = `<div style="font-size:0.8rem; color:#8b8fa3; margin-bottom:0.5rem;">
-            등록된 업체: ${ENTERPRISE_DIRECTORY.length}건 (사용자 추가: ${stored.length}건)
+        let html = `<div style="font-size:0.8rem; color:#8b8fa3; margin-bottom:0.8rem; padding: 10px; background: rgba(52, 152, 219, 0.1); border-radius: 8px; border-left: 4px solid var(--accent-blue);">
+            전체 ${ENTERPRISE_DIRECTORY.length}건의 업체 리스트를 공유하고 있습니다.<br>
+            <span style="color:var(--accent-green)">사용자 추가: ${stored.length}건</span>
         </div>`;
         
         // Show user-added entries first (deletable)
@@ -500,12 +521,25 @@
     }
 
     // Global delete function for enterprise entries
-    window._deleteEnterprise = function(index) {
-        const stored = JSON.parse(localStorage.getItem('enterprise_custom') || '[]');
-        const removed = stored.splice(index, 1)[0];
-        localStorage.setItem('enterprise_custom', JSON.stringify(stored));
-        
-        // Remove from runtime directory
+    window._deleteEnterprise = async function(index) {
+        const removed = CUSTOM_ENTERPRISE_DIRECTORY[index];
+        if (!removed) return;
+
+        if (!confirm(`"${removed.name}" 업체를 삭제하시겠습니까? (팀원 전체에게서 삭제됩니다.)`)) {
+            return;
+        }
+
+        // 1. Delete from Server
+        try {
+            await fetch(`/api/custom-enterprise?name=${encodeURIComponent(removed.name)}&address=${encodeURIComponent(removed.address)}`, {
+                method: 'DELETE'
+            });
+        } catch (e) {
+            console.warn('서버 삭제 실패', e);
+        }
+
+        // 2. Remove from runtime directories
+        CUSTOM_ENTERPRISE_DIRECTORY.splice(index, 1);
         ENTERPRISE_DIRECTORY = ENTERPRISE_DIRECTORY.filter(e => 
             !(e.name === removed.name && e.address === removed.address)
         );

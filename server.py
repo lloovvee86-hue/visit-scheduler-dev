@@ -128,7 +128,56 @@ def search_places():
         print(f"DEBUG: Search Error: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
+# --- Custom Enterprise Management (Shared) ---
+CUSTOM_ENTERPRISE_FILE = 'custom_enterprise.json'
+
+def load_custom_enterprise():
+    if os.path.exists(CUSTOM_ENTERPRISE_FILE):
+        try:
+            with open(CUSTOM_ENTERPRISE_FILE, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        except:
+            return []
+    return []
+
+def save_custom_enterprise(data):
+    with open(CUSTOM_ENTERPRISE_FILE, 'w', encoding='utf-8') as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+
+@app.route('/api/custom-enterprise', methods=['GET'])
+def get_custom_enterprise():
+    return jsonify(load_custom_enterprise()), 200
+
+@app.route('/api/custom-enterprise', methods=['POST'])
+def add_custom_enterprise():
+    entry = request.json
+    if not entry or 'name' not in entry or 'address' not in entry:
+        return jsonify({'error': 'Invalid entry data'}), 400
+    
+    data = load_custom_enterprise()
+    # Check for duplicates
+    exists = any(e['name'] == entry['name'] and e['address'] == entry['address'] for e in data)
+    if not exists:
+        data.append(entry)
+        save_custom_enterprise(data)
+    
+    return jsonify({'success': True, 'count': len(data)}), 201
+
+@app.route('/api/custom-enterprise', methods=['DELETE'])
+def delete_custom_enterprise():
+    name = request.args.get('name')
+    address = request.args.get('address')
+    if not name or not address:
+        return jsonify({'error': 'Name and address required'}), 400
+    
+    data = load_custom_enterprise()
+    new_data = [e for e in data if not (e['name'] == name and e['address'] == address)]
+    
+    save_custom_enterprise(new_data)
+    return jsonify({'success': True, 'count': len(new_data)}), 200
+
 if __name__ == '__main__':
+
     # Use 0.0.0.0 to listen on all interfaces (Required for Render)
     # Use PORT env variable if available (Required for Render)
     port = int(os.environ.get('PORT', 5000))
