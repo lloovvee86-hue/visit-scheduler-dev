@@ -2,6 +2,7 @@ from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 import requests
 import os
+import json
 from dotenv import load_dotenv
 
 # Default to config.env but fallback to .env if missing
